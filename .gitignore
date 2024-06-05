@@ -1,1 +1,6 @@
 test-files
+test-files2/
+1.12.2 Modpack Adventures/
+*.csv
+old.py
+*.db

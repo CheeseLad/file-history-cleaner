@@ -3,6 +3,9 @@
 import os
 import sys
 import re
+import sqlite3
+
+
 
 file_dict = {}
 all_files = {}
@@ -11,18 +14,13 @@ good_to_rename = []
 duplicate_files = []
 extension_list = {}
 
-try:
-    directory = sys.argv[1]
-except IndexError:
-    directory = "."
-
 def date_extractor(file):
     pattern = r'\((.*?)\)'
     matches = re.findall(pattern, file)
     try:
       date_details = matches[0]
     except IndexError:
-        print(f"Date not found in {file}")
+        #print(f"Date not found in {file}")
         return
     date_details = date_details.replace(time_format, "", 1)
     return date_details
@@ -34,33 +32,26 @@ def filename_extractor(file):
         filename = filename.group(1)
         return filename
     except AttributeError:
-        print(f"Filename not found in {file}")
+        #print(f"Filename not found in {file}")
         return
 
-def rename_file(source, destination):
-    try:
-        # Check if the source file exists
-        if os.path.exists(source):
-            # Check if the destination file already exists
-            if not os.path.exists(destination):
-                # Rename the file
-                os.rename(source, destination)
-                print(f"File '{source}' renamed to '{destination}' successfully.")
-            else:
-                print(f"Destination file '{destination}' already exists.")
-        else:
-            print(f"Source file '{source}' not found.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-def list_files(directory):
+def build_file_database(directory):
+    
+    file_count = 0
+    processed_files = 0
     for root, dirs, files in os.walk(directory):
+        file_count += len(files)
+    for root, dirs, files in os.walk(directory):
+
+        
         for file in files:
+            #file_path = os.path.join(root, file)
+            file_info_array = []
             date_info = date_extractor(file)
             if date_info:
                 file_info = filename_extractor(file)
             if date_info:
-                if file_info in all_files: # NEED TO ACCOUNT FOR DIFFERENT EXTENSIONS (index.png and index.jpg)
+                if file_info in all_files:
                     all_files[file_info].append(date_info)
                     basename, extension = os.path.splitext(file)
                     extension_list[basename] = extension
@@ -69,29 +60,63 @@ def list_files(directory):
                     basename, extension = os.path.splitext(file)
                     extension_list[basename] = extension
                 if file_info in file_dict:
-                    #print(f"Duplicate file found: {file_info}")
                     duplicate_files.append(file)
                 file_dict[file_info] = date_info
 
-    #print("Duplicate files: ", duplicate_files)
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            if file not in duplicate_files:
-                good_to_rename.append(file)
-                #print(os.path.join(root, file))
-                basename, extension = os.path.splitext(file)
-                file_info2 = filename_extractor(file)
-                #print(f"Renaming {file} to {file_info2 + extension}")
-                #rename_file(os.path.join(root, file), os.path.join(root, file_info2 + extension))
-                #os.rename(os.path.join(directory, file), os.path.join(directory, file_info + extension))
-            #else:
-                #print(f"File {file} is a duplicate. Skipping.")
+                file_info2 = []
+                file_info2.append(root)
+                file_info2.append(file_info + extension)
+                file_info2.append(file_info)
+                file_info2.append(date_info)
+                file_info2.append(extension)
+                file_info2.append("N")
 
-            #print(f"File: {file}, Duplicate: {file in duplicate_files},", "Rename: ", file in good_to_rename)
+                file_info_array.append(file_info)
+
+                processed_files += 1
+                print(f"Processed {processed_files} of {file_count} files")
+
+        for file_info in file_info_array:
+            database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file) VALUES (?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5]))
+        
+        database.commit()
+
+def check_files_to_remove():
+    cursor = database.execute("SELECT * FROM files WHERE remove_file = 'N'")
+    files = cursor.fetchall()
+    for file in files:
+        file_selected = file[2]
+        cursor2 = database.execute("SELECT * FROM files WHERE file_fullname = ? AND remove_file = 'N'", (file_selected,))
+        dup_files = cursor2.fetchall()
+        if len(dup_files) > 1:
+            dates = []
+            for dup_file in dup_files:
+                dates.append(dup_file[4])
+            max_date = max(dates)
+            for dup_file in dup_files:
+                if dup_file[4] != max_date:
+                    print(f"Removing duplicate file: {dup_file[2]}")
+                    database.execute("UPDATE files SET remove_file = 'Y' WHERE file_fullname = ? AND file_date <> ?", (dup_file[2], max_date))
+                    database.commit()
+        
+
+
+
+   
     
 if __name__ == "__main__":
-    list_files(directory)
-    file_count = {}
+    try:
+        directory = sys.argv[1]
+    except IndexError:
+        directory = "."
+
+    database = sqlite3.connect("files.db")
+    database.execute("DROP TABLE IF EXISTS files;")
+    database.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, file_path TEXT, file_fullname TEXT, file_name TEXT, file_date TEXT, file_extension TEXT, remove_file TEXT);")
+    
+    build_file_database(directory)
+    check_files_to_remove()
+    """file_count = {}
     for file in all_files.keys():
         if len(all_files[file]) > 1:
             #print(f"File: {file}, Count: {all_files[file]}")
@@ -103,6 +128,6 @@ if __name__ == "__main__":
             print(f"File to keep:      {file} ({max_date} UTC){extension}")
             for date in all_files[file]:
                 extension = extension_list[f"{file} ({date} UTC)"]
-                print(f"File to remove:    {file} ({date} UTC){extension}")
+                print(f"File to remove:    {file} ({date} UTC){extension}")"""
 
         
