@@ -46,7 +46,7 @@ def build_file_database(directory):
         
         for file in files:
             #file_path = os.path.join(root, file)
-            file_info_array = []
+            #file_info_array = []
             date_info = date_extractor(file)
             if date_info:
                 file_info = filename_extractor(file)
@@ -71,22 +71,27 @@ def build_file_database(directory):
                 file_info2.append(extension)
                 file_info2.append("N")
 
-                file_info_array.append(file_info)
+                #file_info_array.append(file_info)
 
                 processed_files += 1
+                database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file) VALUES (?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5]))
+                if processed_files % 100 == 0:
+                    database.commit()
                 print(f"Processed {processed_files} of {file_count} files")
+                
 
-        for file_info in file_info_array:
-            database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file) VALUES (?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5]))
+        #for file_info in file_info_array:
+            #database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file) VALUES (?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5]))
         
-        database.commit()
+        #database.commit()
 
 def check_files_to_remove():
     cursor = database.execute("SELECT * FROM files WHERE remove_file = 'N'")
     files = cursor.fetchall()
     for file in files:
+        file_selected_path = file[1]
         file_selected = file[2]
-        cursor2 = database.execute("SELECT * FROM files WHERE file_fullname = ? AND remove_file = 'N'", (file_selected,))
+        cursor2 = database.execute("SELECT * FROM files WHERE file_fullname = ? AND file_path = ? AND remove_file = 'N'", (file_selected, file_selected_path))
         dup_files = cursor2.fetchall()
         if len(dup_files) > 1:
             dates = []
@@ -99,7 +104,20 @@ def check_files_to_remove():
                     database.execute("UPDATE files SET remove_file = 'Y' WHERE file_fullname = ? AND file_date <> ?", (dup_file[2], max_date))
                     database.commit()
         
-
+def rename_files():
+    cursor = database.execute("SELECT * FROM files WHERE remove_file = 'N'")
+    files = cursor.fetchall()
+    for file in files:
+        file_path = file[1]
+        file_fullname = file[2]
+        file_name = file[3]
+        file_date = file[4]
+        file_extension = file[5]
+        new_file_name = f"{file_name} ({file_date}{time_format}){file_extension}"
+        new_file_path = os.path.join(file_path, new_file_name)
+        old_file_path = os.path.join(file_path, file_fullname)
+        print(f"Renaming {new_file_path} to {old_file_path}")
+        os.rename(new_file_path, old_file_path)
 
 
    
@@ -116,6 +134,7 @@ if __name__ == "__main__":
     
     build_file_database(directory)
     check_files_to_remove()
+    rename_files()
     """file_count = {}
     for file in all_files.keys():
         if len(all_files[file]) > 1:
