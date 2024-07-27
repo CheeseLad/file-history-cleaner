@@ -64,17 +64,18 @@ def build_file_database(directory):
                 file_dict[file_info] = date_info
 
                 file_info2 = []
-                file_info2.append(root)
+                file_info2.append(root + "/" + file)
                 file_info2.append(file_info + extension)
                 file_info2.append(file_info)
                 file_info2.append(date_info)
                 file_info2.append(extension)
                 file_info2.append("N")
+                file_info2.append(os.path.getsize(root + "/" + file))
 
                 #file_info_array.append(file_info)
 
                 processed_files += 1
-                database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file) VALUES (?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5]))
+                database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file, size) VALUES (?, ?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5], file_info2[6]))
                 if processed_files % 100 == 0:
                     database.commit()
                 print(f"Processed {processed_files} of {file_count} files")
@@ -130,11 +131,13 @@ if __name__ == "__main__":
 
     database = sqlite3.connect("files.db")
     database.execute("DROP TABLE IF EXISTS files;")
-    database.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, file_path TEXT, file_fullname TEXT, file_name TEXT, file_date TEXT, file_extension TEXT, remove_file TEXT);")
+    database.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, file_path TEXT, file_fullname TEXT, file_name TEXT, file_date TEXT, file_extension TEXT, remove_file TEXT, size TEXT);")
     
     build_file_database(directory)
     check_files_to_remove()
-    rename_files()
+    total_size = database.execute("SELECT SUM(size) FROM files WHERE remove_file = 'N'").fetchone()
+    print(total_size)
+    #rename_files()
     """file_count = {}
     for file in all_files.keys():
         if len(all_files[file]) > 1:
