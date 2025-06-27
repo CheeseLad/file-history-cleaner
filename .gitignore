@@ -1,8 +1,5 @@
-test-files
-test-files2/
-1.12.2 Modpack Adventures/
-*.csv
-old.py
-*.db
-ModLoader
-Jake's Mini Modpack/
+old/
+output/
+catalog_py/
+__pycache__/
+*.json

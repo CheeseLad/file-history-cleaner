@@ -1,155 +1,106 @@
-#!/usr/bin/env python3
-
-import os
 import sys
+import os
 import re
-import sqlite3
+import json
+from datetime import datetime
+import base64
 
+def encode_string(s):
+    return base64.urlsafe_b64encode(s.encode()).decode()
 
+def decode_string(encoded):
+    return base64.urlsafe_b64decode(encoded.encode()).decode()
 
-file_dict = {}
-all_files = {}
-time_format = " UTC"
-good_to_rename = []
-duplicate_files = []
-extension_list = {}
+def get_date_from_filename(filename):
+    match = re.search(r"\((\d{4}_\d{2}_\d{2} \d{2}_\d{2}_\d{2}) UTC\)", filename)
+    if match:
+        timestamp_str = match.group(1)
+        return datetime.strptime(timestamp_str, "%Y_%m_%d %H_%M_%S")
+    return None
 
-def date_extractor(file):
-    pattern = r'\((.*?)\)'
-    matches = re.findall(pattern, file)
-    try:
-      date_details = matches[0]
-    except IndexError:
-        #print(f"Date not found in {file}")
-        return
-    date_details = date_details.replace(time_format, "", 1)
-    return date_details
+def remove_date_from_filename(filename):
+    return re.sub(r"\s*\(\d{4}_\d{2}_\d{2} \d{2}_\d{2}_\d{2} UTC\)", "", filename)
 
-def filename_extractor(file):
-    pattern = r'^(.*?)\s*\((.*?)\)'
-    filename = re.search(pattern, file)
-    try:
-        filename = filename.group(1)
-        return filename
-    except AttributeError:
-        #print(f"Filename not found in {file}")
-        return
-
-def build_file_database(directory):
+args = sys.argv[1:]
+if len(args) == 0:
+    print("Please provide a directory to scan.")
+    sys.exit(1)
     
-    file_count = 0
-    processed_files = 0
-    for root, dirs, files in os.walk(directory):
-        file_count += len(files)
-    for root, dirs, files in os.walk(directory):
+directory = args[0]    
 
-        
-        for file in files:
-            #file_path = os.path.join(root, file)
-            #file_info_array = []
-            date_info = date_extractor(file)
-            if date_info:
-                file_info = filename_extractor(file)
-            if date_info:
-                if file_info in all_files:
-                    all_files[file_info].append(date_info)
-                    basename, extension = os.path.splitext(file)
-                    extension_list[basename] = extension
-                else:
-                    all_files[file_info] = [date_info]
-                    basename, extension = os.path.splitext(file)
-                    extension_list[basename] = extension
-                if file_info in file_dict:
-                    duplicate_files.append(file)
-                file_dict[file_info] = date_info
+json_data = {
+    "delete_count": 0,
+    "delete_size": 0,
+    "keep_count": 0,
+    "keep_size": 0,
+    "total_count": 0,
+    "files": {}
+}
 
-                file_info2 = []
-                file_info2.append(root + "/" + file)
-                file_info2.append(file_info + extension)
-                file_info2.append(file_info)
-                file_info2.append(date_info)
-                file_info2.append(extension)
-                file_info2.append("N")
-                file_info2.append(os.path.getsize(root + "/" + file))
-
-                #file_info_array.append(file_info)
-
-                processed_files += 1
-                database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file, size) VALUES (?, ?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5], file_info2[6]))
-                if processed_files % 100 == 0:
-                    database.commit()
-                print(f"Processed {processed_files} of {file_count} files")
-                
-
-        #for file_info in file_info_array:
-            #database.execute("INSERT INTO files (file_path, file_fullname, file_name, file_date, file_extension, remove_file) VALUES (?, ?, ?, ?, ?, ?)", (file_info2[0], file_info2[1], file_info2[2], file_info2[3], file_info2[4], file_info2[5]))
-        
-        #database.commit()
-
-def check_files_to_remove():
-    cursor = database.execute("SELECT * FROM files WHERE remove_file = 'N'")
-    files = cursor.fetchall()
+for root, dirs, files in os.walk(directory):
     for file in files:
-        file_selected_path = file[1]
-        file_selected = file[2]
-        cursor2 = database.execute("SELECT * FROM files WHERE file_fullname = ? AND file_path = ? AND remove_file = 'N'", (file_selected, file_selected_path))
-        dup_files = cursor2.fetchall()
-        if len(dup_files) > 1:
-            dates = []
-            for dup_file in dup_files:
-                dates.append(dup_file[4])
-            max_date = max(dates)
-            for dup_file in dup_files:
-                if dup_file[4] != max_date:
-                    print(f"Removing duplicate file: {dup_file[2]}")
-                    database.execute("UPDATE files SET remove_file = 'Y' WHERE file_fullname = ? AND file_date <> ?", (dup_file[2], max_date))
-                    database.commit()
+        file_path = os.path.abspath(os.path.join(root, file))
+        file_info = os.stat(file_path)
+
+        timestamp_dt = get_date_from_filename(file)
+        timestamp_iso = timestamp_dt.isoformat() + "Z" if timestamp_dt else None
+
+        base_name = remove_date_from_filename(file)
+        base_id = encode_string(base_name)
+
+        if base_id not in json_data["files"]:
+            json_data["files"][base_id] = {
+                "original_path": os.path.abspath(os.path.join(root, base_name)),
+                "versions": {}
+            }
+
+        version_key = timestamp_dt.strftime("v%Y%m%d%H%M%S") if timestamp_dt else "v_unknown"
+
+        json_data["files"][base_id]["versions"][version_key] = {
+            "current_name": file,
+            "original_name": base_name,
+            "path": file_path,
+            "size": file_info.st_size,
+            "timestamp": timestamp_iso,
+            "timestamp_dt": timestamp_dt  # store for sorting, will remove before saving
+        }
         
-def rename_files():
-    cursor = database.execute("SELECT * FROM files WHERE remove_file = 'N'")
-    files = cursor.fetchall()
-    for file in files:
-        file_path = file[1]
-        file_fullname = file[2]
-        file_name = file[3]
-        file_date = file[4]
-        file_extension = file[5]
-        new_file_name = f"{file_name} ({file_date}{time_format}){file_extension}"
-        new_file_path = os.path.join(file_path, new_file_name)
-        old_file_path = os.path.join(file_path, file_fullname)
-        print(f"Renaming {new_file_path} to {old_file_path}")
-        os.rename(new_file_path, old_file_path)
-
-
-   
-    
-if __name__ == "__main__":
-    try:
-        directory = sys.argv[1]
-    except IndexError:
-        directory = "."
-
-    database = sqlite3.connect("files.db")
-    database.execute("DROP TABLE IF EXISTS files;")
-    database.execute("CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY, file_path TEXT, file_fullname TEXT, file_name TEXT, file_date TEXT, file_extension TEXT, remove_file TEXT, size TEXT);")
-    
-    build_file_database(directory)
-    check_files_to_remove()
-    total_size = database.execute("SELECT SUM(size) FROM files WHERE remove_file = 'N'").fetchone()
-    print(total_size)
-    #rename_files()
-    """file_count = {}
-    for file in all_files.keys():
-        if len(all_files[file]) > 1:
-            #print(f"File: {file}, Count: {all_files[file]}")
-            # find max date
-            max_date = max(all_files[file])
-            #print(f"Max Date: {max_date}")
-            all_files[file].remove(max_date)
-            extension = extension_list[f"{file} ({max_date} UTC)"]
-            print(f"File to keep:      {file} ({max_date} UTC){extension}")
-            for date in all_files[file]:
-                extension = extension_list[f"{file} ({date} UTC)"]
-                print(f"File to remove:    {file} ({date} UTC){extension}")"""
-
+        json_data["keep_count"] += 1
+        json_data["total_count"] += 1
+        json_data["keep_size"] += file_info.st_size
         
+        print(f"Current file count: {json_data['keep_count']}")
+
+# Mark versions to delete (all but the most recent one per file)
+for file_data in json_data["files"].values():
+    versions = file_data["versions"]
+    # Sort by timestamp descending
+    sorted_versions = sorted(
+        versions.items(),
+        key=lambda item: item[1]["timestamp_dt"] or datetime.min,
+        reverse=True
+    )
+    # Keep the most recent
+    for i, (v_key, v_data) in enumerate(sorted_versions):
+        v_data["to_delete"] = i != 0
+        del v_data["timestamp_dt"]  # clean up
+        if v_data["to_delete"]:
+            json_data["delete_count"] += 1
+            json_data["keep_count"] -= 1
+            json_data["delete_size"] += v_data["size"]
+            json_data["keep_size"] -= v_data["size"]
+            
+            print(f"Current delete count: {json_data['delete_count']}")
+
+output_file = "output.json"
+keep_size_gb = int(json_data['keep_size']) / (1024 ** 3)
+delete_size_gb = int(json_data["delete_size"]) / (1024 ** 3)
+
+with open(output_file, "w") as f:
+    json.dump(json_data, f, indent=2)
+
+print(f"\nJSON data saved to {output_file}")
+print(f"Total files processed: {json_data['total_count']}")
+print(f"Files to keep: {json_data["keep_count"]} (Total size: {keep_size_gb:.2f} GB)")
+print(f"Files to delete: {json_data["delete_count"]} (Total size: {delete_size_gb:.2f} GB)")
+print("Done.")
