@@ -3,7 +3,7 @@ from collections import defaultdict
 import os
 import json
 import shutil
-from extractor import export_table_to_csv
+from lib.edb_extractor import export_table_to_csv
 import sys
 
 def load_string_map(string_csv_path):
