@@ -3,3 +3,4 @@ output/
 catalog_py/
 __pycache__/
 *.json
+output_*

@@ -40,7 +40,8 @@ def main(directory, directories_to_skip=[]):
         "keep_size": 0,
         "total_count": 0,
         "total_size": 0,
-        "files": {}
+        "files": {},
+        "deleted_files": [],
     }
 
     for root, dirs, files in os.walk(data_directory):
@@ -113,6 +114,8 @@ def main(directory, directories_to_skip=[]):
 
         for i, version in enumerate(file_data["versions"].values()):
             version.pop("timestamp_dt", None)
+            version.pop("current_name", None)  # remove current_name as it's not needed in final output
+            version.pop("original_name", None)  # remove original_name as it's not needed in final output
             if i == 0:
                 version["to_delete"] = False  # keep newest version
                 json_data["keep_count"] += 1
@@ -121,6 +124,7 @@ def main(directory, directories_to_skip=[]):
                 version["to_delete"] = True   # mark others to delete
                 json_data["delete_count"] += 1
                 json_data["delete_size"] += version["size"]
+                json_data["deleted_files"].append(version['src_path'])
 
     output_file = "output.json"
 
@@ -136,7 +140,7 @@ if __name__ == "__main__":
     # directory = r'D:\FileHistory\Jake\JAKE-E7450'
     directory = r'D:\FileHistory\Jake\2020_08_02'
     output_directory = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
-    dry_run = True
+    dry_run = False
     # directories_to_skip = [
     #    ".vscode",
     # ]
@@ -144,9 +148,7 @@ if __name__ == "__main__":
 
     folder_info = main(directory, directories_to_skip)
 
-    output_dir = r'./output'
-
-    # files_copied, files_skipped = copy_and_rename_files(folder_info, output_directory, dry_run)
+    files_copied, copied_size, files_skipped, skipped_size = copy_and_rename_files(folder_info, output_directory, dry_run)
 
     print(
         f"Total files processed: {folder_info['total_count']} (Total size: {folder_info['total_size'] / (1024 ** 3):.2f} GB)")
@@ -154,3 +156,6 @@ if __name__ == "__main__":
         f"Files to keep: {folder_info['keep_count']} (Total size: {folder_info['keep_size'] / (1024 ** 3):.2f} GB)")
     print(
         f"Files to delete: {folder_info['delete_count']} (Total size: {folder_info['delete_size'] / (1024 ** 3):.2f} GB)")
+    
+    print(f"Files copied: {files_copied} (Total size: {copied_size / (1024 ** 3):.2f} GB)")
+    print(f"Files skipped: {files_skipped} (Total size: {skipped_size / (1024 ** 3):.2f} GB)")
