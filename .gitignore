@@ -1,6 +1,4 @@
 old/
-output/
-catalog_py/
 __pycache__/
-*.json
 output_*
+*.json

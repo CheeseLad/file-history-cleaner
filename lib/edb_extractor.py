@@ -3,9 +3,11 @@ import csv
 import os
 from datetime import datetime, timedelta
 
+
 def filetime_to_dt(filetime):
     # Windows FILETIME to datetime
     return datetime(1601, 1, 1) + timedelta(microseconds=filetime / 10)
+
 
 def export_table_to_csv(edb_file, table_name, output_csv):
     print(f"Exporting table {table_name} to {output_csv}")
@@ -22,7 +24,7 @@ def export_table_to_csv(edb_file, table_name, output_csv):
         esedb.close()
         return
 
-    with open(output_csv, 'w', newline='', encoding='utf-8') as csvfile:
+    with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
         writer = None
         for row_idx in range(table.get_number_of_records()):
             record = table.get_record(row_idx)
@@ -32,14 +34,26 @@ def export_table_to_csv(edb_file, table_name, output_csv):
                 col_name = col.get_name()
                 raw_value = record.get_value_data(col_idx)
                 # List of columns that should be integers in the file table
-                int_columns = {"id", "parentId", "childId", "state", "status", "fileSize", "tQueued", "tCaptured", "tUpdated"}
+                int_columns = {
+                    "id",
+                    "parentId",
+                    "childId",
+                    "state",
+                    "status",
+                    "fileSize",
+                    "tQueued",
+                    "tCaptured",
+                    "tUpdated",
+                }
 
                 if table_name == "string" and col_name == "id":
                     # Try to extract as integer
                     if isinstance(raw_value, int):
                         value = raw_value
                     elif isinstance(raw_value, bytes):
-                        value = int.from_bytes(raw_value, byteorder="little", signed=False)
+                        value = int.from_bytes(
+                            raw_value, byteorder="little", signed=False
+                        )
                     else:
                         value = raw_value
                 elif table_name == "string" and col_name == "string":
@@ -58,7 +72,9 @@ def export_table_to_csv(edb_file, table_name, output_csv):
                     if isinstance(raw_value, int):
                         value = raw_value
                     elif isinstance(raw_value, bytes):
-                        value = int.from_bytes(raw_value, byteorder="little", signed=False)
+                        value = int.from_bytes(
+                            raw_value, byteorder="little", signed=False
+                        )
                     else:
                         value = raw_value
                 else:
@@ -72,14 +88,17 @@ def export_table_to_csv(edb_file, table_name, output_csv):
                     else:
                         value = raw_value
                 if isinstance(value, str):
-                    value = value.rstrip('\x00\r\n ')
+                    value = value.rstrip("\x00\r\n ")
                 row[col_name] = value
             if writer is None:
-                writer = csv.DictWriter(csvfile, fieldnames=row.keys(), quoting=csv.QUOTE_ALL)
+                writer = csv.DictWriter(
+                    csvfile, fieldnames=row.keys(), quoting=csv.QUOTE_ALL
+                )
                 writer.writeheader()
             writer.writerow(row)
     print(f"Exported table {table_name} to {output_csv}")
     esedb.close()
+
 
 if __name__ == "__main__":
     edb_path = os.path.join("Configuration", "Catalog1.edb")
