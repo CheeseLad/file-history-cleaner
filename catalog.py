@@ -5,6 +5,7 @@ import json
 import shutil
 from lib.edb_extractor import export_table_to_csv
 import sys
+from datetime import datetime
 
 
 def load_string_map(string_csv_path):
@@ -152,13 +153,13 @@ def clean_id(id_str):
 
 
 def main():
-    catalog_dir = r"./catalog_py"
+    catalog_dir = r"."
     filepath = os.path.join(catalog_dir, "file.csv")
     string_csv_path = os.path.join(catalog_dir, "string.csv")
     directory = r"D:\FileHistory\Jake\JAKE-E7450"  # Change this
     of_directory = os.path.join(directory, "Data", "$OF")
     edb_path = os.path.join(directory, "Configuration", "Catalog1.edb")
-    output_dir = r"./output"
+    output_dir = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     tables = ["file", "string"]
     for table in tables:
         export_table_to_csv(edb_path, table, os.path.join(catalog_dir, f"{table}.csv"))
