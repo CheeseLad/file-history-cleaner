@@ -86,7 +86,7 @@ def parse_csv(filepath):
     return id_index, parent_index
 
 
-def copy_and_rename_files(folder_info, source_root, output_root):
+def copy_and_rename_files(folder_info, source_root, output_root, dry_run):
     bad_paths = []
     for folder_id, folder in folder_info.items():
         for file_entry in folder["files"]:
@@ -100,7 +100,8 @@ def copy_and_rename_files(folder_info, source_root, output_root):
             rel_path_parts = [p for p in rel_path_norm.split("/") if p]
             dest_dir = os.path.join(output_root, *rel_path_parts)
             try:
-                os.makedirs(dest_dir, exist_ok=True)
+                if not dry_run:
+                    os.makedirs(dest_dir, exist_ok=True)
             except Exception as e:
                 print(f"Failed to create directory {dest_dir}: {e}")
                 bad_paths.append(
@@ -136,7 +137,8 @@ def copy_and_rename_files(folder_info, source_root, output_root):
             if os.path.exists(dest_file):
                 print(f"File already exists, overwriting: {dest_file}")
             try:
-                shutil.copy2(src_file, dest_file)
+                if not dry_run:
+                    shutil.copy2(src_file, dest_file)
                 print(f"Copied {src_file} -> {dest_file}")
             except Exception as e:
                 print(f"Failed to copy {src_file} to {dest_file}: {e}")
@@ -156,11 +158,13 @@ def main():
     catalog_dir = r"."
     filepath = os.path.join(catalog_dir, "file.csv")
     string_csv_path = os.path.join(catalog_dir, "string.csv")
-    directory = r"D:\FileHistory\Jake\JAKE-E7450"  # Change this
+    directory = r"Z:\Jake\JAKE-E7450"  # Change this
     of_directory = os.path.join(directory, "Data", "$OF")
     edb_path = os.path.join(directory, "Configuration", "Catalog1.edb")
     output_dir = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     tables = ["file", "string"]
+    dry_run = True
+    
     for table in tables:
         export_table_to_csv(edb_path, table, os.path.join(catalog_dir, f"{table}.csv"))
     sorted_folder_info = list_folders_with_files_and_strings(
@@ -187,7 +191,7 @@ def main():
             print(f"ID {target_id} not found.")
 
     if output_dir:
-        copy_and_rename_files(sorted_folder_info, of_directory, output_dir)
+        copy_and_rename_files(sorted_folder_info, of_directory, output_dir, dry_run)
 
 
 if __name__ == "__main__":
