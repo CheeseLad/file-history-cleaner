@@ -28,9 +28,12 @@ def remove_date_from_filename(filename):
     return re.sub(r"\s*\(\d{4}_\d{2}_\d{2} \d{2}_\d{2}_\d{2} UTC\)", "", filename)
 
 
-def main(directory, directories_to_skip=[], save_json=True):
+def main(directory, directories_to_skip=[], save_json=True, has_data_directory=True):
 
-    data_directory = directory + r"\Data"
+    if has_data_directory:
+        data_directory = directory + r"\Data"
+    else:
+        data_directory = directory
 
     json_data = {
         "delete_count": 0,
@@ -138,17 +141,20 @@ def main(directory, directories_to_skip=[], save_json=True):
 
 if __name__ == "__main__":
 
-    # directory = r'D:\FileHistory\Jake\JAKE-E7450'
-    directory = r"D:\FileHistory\Jake\2020_08_02"
+    #directory = r"D:\FileHistory\Jake\CHEESEMACHINE"
+    directory = r"F:\Semi-Bin\D"
+    # directory = r"Z:\Jake\JAKE-E7450"
     output_directory = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
-    dry_run = True
-    save_json = False
+    dry_run = False
+    save_json = True
+    directories_to_skip = []
+    has_data_directory = False
+    
     # directories_to_skip = [
     #    ".vscode",
     # ]
-    directories_to_skip = []
 
-    folder_info = main(directory, directories_to_skip, save_json)
+    folder_info = main(directory, directories_to_skip, save_json, has_data_directory)
 
     files_copied, copied_size, files_skipped, skipped_size = copy_and_rename_files(
         folder_info, output_directory, dry_run
