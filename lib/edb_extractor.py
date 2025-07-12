@@ -401,10 +401,3 @@ def export_table_to_csv(edb_file, table_name, output_csv):
     
     #print(f"Exported table {table_name} to {output_csv}")
     esedb.close()
-
-
-if __name__ == "__main__":
-    edb_path = os.path.join("Configuration", "Catalog1.edb")
-    tables = ["backupset", "global", "library", "namespace", "string"]
-    for table in tables:
-        export_table_to_csv(edb_path, table, f"catalog_py/{table}.csv")

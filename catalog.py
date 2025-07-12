@@ -6,7 +6,37 @@ import shutil
 from lib.edb_extractor import export_table_to_csv
 import sys
 from datetime import datetime
+import logging
+from tqdm import tqdm
 
+# Configure logging
+def setup_logging():
+    """Configure logging to output to both console and file"""
+    # Create logger
+    logger = logging.getLogger('catalog')
+    logger.setLevel(logging.DEBUG)
+    
+    # Create formatters
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # Create file handler - use 'w' mode to clear the file on each run
+    file_handler = logging.FileHandler('catalog.log', mode='w', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)  # Only show warnings and errors on console
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# Initialize logger
+logger = setup_logging()
 
 def load_string_map(string_csv_path):
     string_map = {}
@@ -32,10 +62,17 @@ def list_folders_with_files_and_strings(
     string_map = load_string_map(string_csv_path)
     file_map = load_file_map(file_csv_path)
     folder_info = {}
+    
+    # Get list of directories to process
+    directories = [name for name in os.listdir(directory_path) 
+                  if os.path.isdir(os.path.join(directory_path, name))]
+    
+    # Create progress bar for folder checking
+    pbar = tqdm(total=len(directories), desc="Checking folders", unit="folder")
 
-    for name in os.listdir(directory_path):
+    for name in directories:
         folder_path = os.path.join(directory_path, name)
-        print(f"Checking: {name}")  # Debug line
+        logger.info(f"Checking: {name}")
         if os.path.isdir(folder_path):
             files = [
                 f
@@ -61,6 +98,12 @@ def list_folders_with_files_and_strings(
                     }
                 )
             folder_info[name] = {"files": file_entries, "count": len(files)}
+            
+            # Update progress bar
+            pbar.update(1)
+
+    # Close progress bar
+    pbar.close()
 
     # Sort by numeric folder names
     sorted_folder_info = dict(sorted(folder_info.items(), key=lambda x: int(x[0])))
@@ -68,7 +111,7 @@ def list_folders_with_files_and_strings(
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(sorted_folder_info, f, indent=2)
 
-    print(f"Saved info for {len(sorted_folder_info)} folders to {output_file}")
+    logger.info(f"Saved info for {len(sorted_folder_info)} folders to {output_file}")
     return sorted_folder_info
 
 
@@ -87,7 +130,13 @@ def parse_csv(filepath):
 
 
 def copy_and_rename_files(folder_info, source_root, output_root, dry_run):
+    logger.info(f"Starting file copy process. Total folders: {len(folder_info)}")
     bad_paths = []
+    total_files = sum(len(folder["files"]) for folder in folder_info.values())
+    
+    # Create progress bar
+    pbar = tqdm(total=total_files, desc="Copying files", unit="file")
+    
     for folder_id, folder in folder_info.items():
         for file_entry in folder["files"]:
             src_folder = os.path.join(source_root, folder_id)
@@ -103,7 +152,7 @@ def copy_and_rename_files(folder_info, source_root, output_root, dry_run):
                 if not dry_run:
                     os.makedirs(dest_dir, exist_ok=True)
             except Exception as e:
-                print(f"Failed to create directory {dest_dir}: {e}")
+                logger.error(f"Failed to create directory {dest_dir}: {e}")
                 bad_paths.append(
                     {
                         "src": src_file,
@@ -118,14 +167,14 @@ def copy_and_rename_files(folder_info, source_root, output_root, dry_run):
             dest_file = os.path.join(dest_dir, new_name)
             # Check for path length issues (Windows default MAX_PATH is 260)
             if os.name == "nt" and (len(dest_file) > 255 or len(dest_dir) > 240):
-                print(f"Skipping {dest_file}: path too long")
+                logger.warning(f"Skipping {dest_file}: path too long")
                 bad_paths.append(
                     {"src": src_file, "dest": dest_file, "reason": "path too long"}
                 )
                 continue
             # Check if source file exists
             if not os.path.exists(src_file):
-                print(f"Source file does not exist: {src_file}")
+                logger.error(f"Source file does not exist: {src_file}")
                 bad_paths.append(
                     {
                         "src": src_file,
@@ -135,19 +184,29 @@ def copy_and_rename_files(folder_info, source_root, output_root, dry_run):
                 )
                 continue
             if os.path.exists(dest_file):
-                print(f"File already exists, overwriting: {dest_file}")
+                logger.info(f"File already exists, overwriting: {dest_file}")
             try:
                 if not dry_run:
                     shutil.copy2(src_file, dest_file)
-                print(f"Copied {src_file} -> {dest_file}")
+                # logger.info(f"Copied {src_file} -> {dest_file}")
             except Exception as e:
-                print(f"Failed to copy {src_file} to {dest_file}: {e}")
+                logger.error(f"Failed to copy {src_file} to {dest_file}: {e}")
                 bad_paths.append({"src": src_file, "dest": dest_file, "reason": str(e)})
+                
+            # Update progress bar
+            pbar.update(1)
+    
+    # Close progress bar
+    pbar.close()
+    logger.info(f"File copy process completed. Processed {total_files} files.")
     # Write bad paths to a file for review
     if bad_paths:
-        with open("bad_paths_2.txt", "a", encoding="utf-8") as f:
+        logger.warning(f"Found {len(bad_paths)} problematic files. Writing to bad_paths.log")
+        with open("bad_paths.log", "w", encoding="utf-8") as f:
             for entry in bad_paths:
                 f.write(str(entry) + "\n")
+    else:
+        logger.info("No problematic files found.")
 
 
 def clean_id(id_str):
@@ -155,43 +214,48 @@ def clean_id(id_str):
 
 
 def main():
+    logger.info("Starting catalog processing...")
     catalog_dir = r"."
     filepath = os.path.join(catalog_dir, "file.csv")
     string_csv_path = os.path.join(catalog_dir, "string.csv")
-    directory = r"Z:\Jake\JAKE-E7450"  # Change this
+    #directory = r"Z:\Jake\JAKE-E7450"  # Change this
+    directory = r"D:\FileHistory\Jake\CHEESEMACHINE"
     of_directory = os.path.join(directory, "Data", "$OF")
     edb_path = os.path.join(directory, "Configuration", "Catalog1.edb")
     output_dir = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     tables = ["file", "string"]
     dry_run = True
     
+    logger.info(f"Processing directory: {directory}")
+    logger.info(f"Output directory: {output_dir}")
+    logger.info(f"Dry run mode: {dry_run}")
+
     for table in tables:
+        logger.info(f"Exporting table: {table}")
         export_table_to_csv(edb_path, table, os.path.join(catalog_dir, f"{table}.csv"))
+        
     sorted_folder_info = list_folders_with_files_and_strings(
         of_directory, string_csv_path, filepath
     )
     id_index, parent_index = parse_csv(filepath)
 
     for folder, info in sorted_folder_info.items():
-        print(f"\nFolder: {folder}, File Count: {info['count']}, Files:")
+        logger.info(f"\nFolder: {folder}, File Count: {info['count']}, Files:")
         for file_entry in info["files"]:
-            print(file_entry)
+            logger.debug(f"  {file_entry}")
         target_id = clean_id(folder)
-        # print("Checking folder ID:", repr(target_id))
-        # print("All CSV IDs:", [repr(k) for k in id_index.keys()])
 
         if target_id in id_index:
-            # print(f"Found target row: {id_index[target_id]}")
 
             children = parent_index.get(target_id, [])
-            # print(f"Children of {target_id}:")
-            for child in children:
-                print(child)
         else:
-            print(f"ID {target_id} not found.")
+            logger.warning(f"ID {target_id} not found.")
 
     if output_dir:
+        logger.info("Starting file copy process...")
         copy_and_rename_files(sorted_folder_info, of_directory, output_dir, dry_run)
+    
+    logger.info("Catalog processing completed.")
 
 
 if __name__ == "__main__":
