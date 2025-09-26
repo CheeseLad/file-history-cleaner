@@ -141,14 +141,15 @@ def main(directory, directories_to_skip=[], save_json=True, has_data_directory=T
 
 if __name__ == "__main__":
 
-    #directory = r"D:\FileHistory\Jake\CHEESEMACHINE"
-    directory = r"F:\Semi-Bin\D"
-    # directory = r"Z:\Jake\JAKE-E7450"
-    output_directory = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    directory = r"D:\FileHistory\Jake\CHEESEMACHINE"
+    #directory = r"F:\Semi-Bin\D"
+    #directory = r"Z:\Jake\JAKE-E7450"
+    #output_directory = f'./output_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    output_directory = r"D:\CHEESEMACHINE"
     dry_run = False
     save_json = True
     directories_to_skip = []
-    has_data_directory = False
+    has_data_directory = True
     
     # directories_to_skip = [
     #    ".vscode",
